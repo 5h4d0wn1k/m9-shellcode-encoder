@@ -1,83 +1,84 @@
 # M9 — Shellcode Encoder
 
-Shellcode encoding techniques for exploit development education.
+A real encoder/decoder toolkit for x86-64 with a **working, verifiable
+decode-and-execute** pipeline. Fully offline and stdlib-only.
 
-## Overview
+## What genuinely works
 
-This project demonstrates shellcode encoding/obfuscation techniques:
-- XOR encoding (single-byte and multi-byte keys)
-- Additive encoding
-- Alphanumeric-safe encoding
-- Position-independent decoder stub generation
-- NOP sled generation
-- Hexdumping output
+- **Single-byte XOR** encode/decode (fixed or seeded random key).
+- **Repeating-key XOR** encode/decode.
+- **XOR key finder** — single-byte brute force against a known plaintext, or a
+  printable-ASCII heuristic when no plaintext is given.
+- **Reversible alphanumeric transform** — arbitrary bytes become a strictly
+  alphanumeric ASCII stream (62-char alphabet, 2 output chars per byte) that
+  decodes back losslessly.
+- **REAL x86-64 machine-code decoder stub** — a 18-byte standalone loop that
+  decodes a buffer in place via read/write/execute mapping, verified byte-for-
+  byte.
+- **Isolated decode-and-execute** — a hand-built minimal **static ELF**
+  (no libc) whose entry code XOR-decodes a benign `0x90` NOP-sled + `INT3`
+  payload in place, then falls through into it. Running the ELF as a subprocess
+  proves the decode-then-execute path by dying of SIGTRAP at the `INT3`. No
+  ctypes, no libffi, no compiler needed at runtime.
 
-## Features
-
-- **XOR encode**: single and multi-byte XOR ciphers
-- **Add encode**: additive transformations
-- **Alphanumeric**: converts bytes toward ASCII-safe output
-- **x86/x64**: architecture-aware output
-- **Decoder stubs**: position-independent assembly sketches
-- **Hexdump**: formatted byte display
-
-## Usage
+## CLI
 
 ```bash
-python3 shellcode.py x64 90cd80cc
-python3 shellcode.py x86 31c050682f2f7368
+python3 firmware/shellcode.py --help
+
+python3 firmware/shellcode.py demo                # offline demo (exits 0)
+python3 firmware/shellcode.py encode 9090cc --key 0x1b -o reports/m9
+python3 firmware/shellcode.py decode <hex> --key 0x1b -o reports/m9
+python3 firmware/shellcode.py findkey <hex> --plaintext deadbeef -o reports/m9
+python3 firmware/shellcode.py verify [HEX] [--key K]   # decode+execute probe
 ```
 
-## Example Output
+Reports (JSON + Markdown) are written under `reports/` (gitignored).
 
-```
-=== M9 - Shellcode Encoder ===
-Architecture: x64
-Input (3 bytes):
-00000000  90 cd 80  ...
+## Tests
 
--- XOR Encoding (single byte key=0x3a) --
-Cipher hex: aa0a...
+```bash
+python3 -m unittest discover -s tests -v
 ```
 
-## Legal Disclaimer
+17 stdlib unittest cases covering encode/decode round-trips, the key finder,
+the alphanumeric transform, ELF construction, the real INT3 signal probe, and
+CLI exit codes.
 
-**IMPORTANT: Read before use.**
+## Live Lab Test Plan
 
-This project is provided for **educational and authorized security testing purposes only**. 
+1. In an offline lab VM run `python3 firmware/shellcode.py demo` and confirm it
+   prints the digest and `Isolated decode+execute NOP/int3 probe: REACHED INT3
+   (OK)` then exits 0.
+2. Encode a known payload and confirm `decode` reproduces it bit-for-bit.
+3. Run `verify` (no args) — it builds and executes the benign sled ELF in a
+   temp dir and reports that the process died of SIGTRAP, proving the
+   decode-then-execute path.
+4. Only ever encode/execute payloads you have written yourself for your own lab
+   machines or explicitly authorized targets. The shipped execute probe only
+   ever runs NOP + INT3.
 
-### Authorization Requirements
-- You MUST have explicit written permission from the network owner before using this tool
-- Unauthorized interception of network communications is illegal under federal and state laws
-- This tool should ONLY be used on networks you own or have written authorization to test
+## Metrics
 
-### Legal Framework
-- **Computer Fraud and Abuse Act (CFAA)**: Unauthorized access to computer systems is a federal crime
-- **Wiretap Act (18 U.S.C. § 2511)**: Interception of electronic communications without consent is illegal
-- **State Laws**: Many states have additional computer crime and wiretapping statutes
-- **GDPR/CCPA**: Data collection may be subject to privacy regulations
+- Transforms: single/multi-XOR, reversible alphanumeric, XOR key finder.
+- Decoder: verified 18-byte x86-64 in-place XOR decoder (vmlinuz-grade loop).
+- Exec path: minimal static ELF self-decoding blob runs a benign NOP+INT3 sled
+  in an isolated subprocess and confirms SIGTRAP.
+- Test count: 17 stdlib unittest cases (see `tests/`).
+- Dependencies: Python 3 stdlib only (`struct`, `subprocess`, `tempfile`,
+  `binascii`, `json`, `argparse`); optional `mmap`/`ctypes` are stdlib too.
+- Offline demo: exits 0 and shows a real recovered payload + reached INT3.
 
-### Acceptable Use
-- Testing security of your own networks
-- Authorized penetration testing with written scope
-- Academic research in controlled lab environments
-- Security education and training
+## IMPORTANT: Read before use.
 
-### Prohibited Use
-- Intercepting communications on networks you do not own
-- Attacking infrastructure without authorization
-- Any activity that violates applicable laws or regulations
-- Commercial use without proper licensing
-
-### No Warranty
-This software is provided "AS IS" without warranty of any kind. The author is not responsible for any misuse or damage caused by this software.
-
-### Responsible Disclosure
-If you discover vulnerabilities using this tool, follow responsible disclosure practices:
-1. Report to the vendor/owner privately
-2. Allow reasonable time for remediation
-3. Do not exploit beyond proof of concept
+This tool is for **educational and authorized use only**. It can execute
+machine code you supply. You MUST only ever encode, decode, or execute payloads
+you have written yourself, on systems you own or have explicit written
+permission to use. Executing untrusted shellcode or shellcode on systems you do
+not own may violate computer-crime laws (including the CFAA). The author is
+not responsible for misuse. The bundled decode-and-execute probe only ever runs
+an inert NOP sled that ends in a breakpoint (INT3) and performs no action.
 
 ## License
 
-MIT
+MIT — see `LICENSE`.
